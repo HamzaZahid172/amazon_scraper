@@ -1,0 +1,66 @@
+# ----------------------------
+# Python
+# ----------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+.env
+.venv
+venv/
+ENV/
+
+# ----------------------------
+# Playwright
+# ----------------------------
+.playwright/
+playwright-report/
+test-results/
+
+# ----------------------------
+# IDE / Editors
+# ----------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*.iml
+
+# ----------------------------
+# OS files
+# ----------------------------
+.DS_Store
+Thumbs.db
+
+# ----------------------------
+# Logs
+# ----------------------------
+*.log
+
+# ----------------------------
+# Excel / Output files
+# ----------------------------
+output/
+*.xlsx
+*.csv
+
+# ----------------------------
+# Input files (optional)
+# Uncomment if input data should NOT be committed
+# ----------------------------
+# input/
+
+# ----------------------------
+# Temporary / Debug files
+# ----------------------------
+*.tmp
+*.bak
+*.cache
+
+# ----------------------------
+# Node (if added later)
+# ----------------------------
+node_modules/
