@@ -1,18 +1,15 @@
 import asyncio
 import random
-from pathlib import Path
-from typing import List, Dict
 import re
-from typing import Optional
+from pathlib import Path
+from typing import Dict, Optional
 
 import pandas as pd
 from playwright.async_api import async_playwright, Page, BrowserContext
 
 
-INPUT_FILE = "input/check.xlsx"
+INPUT_FILE = "input/Check.xlsx"
 OUTPUT_FILE = "output/selection_output.xlsx"
-
-AMAZON_PRODUCT_URL = "https://www.amazon.com/dp/{}"
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
@@ -23,46 +20,117 @@ USER_AGENTS = [
 MIN_DELAY = 5
 MAX_DELAY = 8
 
-def extract_price_from_text(text: Optional[str]) -> Optional[str]:
+
+def extract_price(text: Optional[str]) -> Optional[str]:
     if not text:
         return None
-    match = re.search(r'(?:\$|EUR)\s?\d+(?:\.\d+)?', text)
-    return match.group(0) if match else None
+    m = re.search(r"\$\s*(\d+\.\d+)", text)
+    return "$" + m.group(1) if m else None
 
+async def extract_search_result(page: Page, search_url: str) -> Optional[Dict]:
+    await page.goto(search_url, timeout=60_000, wait_until="domcontentloaded")
+    await page.wait_for_selector("a.a-link-normal.s-no-outline", timeout=15000)
+    await page.wait_for_timeout(3000)
 
+    item = await page.evaluate("""
+        (searchUrl) => {
+            const link = document.querySelector("a.a-link-normal.s-no-outline");
+            if (!link) return null;
 
-async def extract_product(page: Page, asin: str,) -> List[Dict]:
-    url = AMAZON_PRODUCT_URL.format(asin)
+            const container = link.closest("div[data-component-type='s-search-result']");
+            if (!container) return null;
+
+            const titleEl = container.querySelector("h2 span");
+            const priceEl = Array.from(container.querySelectorAll("div[class='puisg-col-inner']"))
+                    .find(x => x.innerText.toLowerCase().includes(`${"paperback"|"kindle"|"hardcover"|"audiobook"}`));
+
+            const url = "https://www.amazon.com" + link.getAttribute("href");
+
+            return {
+                searchUrl: searchUrl,
+                title: titleEl ? titleEl.innerText.trim() : null,
+                url: url,
+                asin: url.includes("/dp/") ? url.split("/dp/")[1].split("/")[0] : null,
+                searchPrice: priceEl ? priceEl.innerText.trim() : null
+            };
+        }
+    """, search_url)
+    
+    if not item:
+        return []
+
+    def getPrice(block, label):
+        if not block:
+            return None
+
+        block = block.lower()
+        label = label.lower()
+
+        i = block.find(label)
+        if i == -1:
+            return None
+
+        after = block[i + len(label): i + len(label) + 300]
+
+        next_format = re.search(r"\b(kindle|paperback|hardcover|audiobook)\b", after)
+        price = re.search(r"\$\s*(\d+\.\d+)", after)
+
+        if not price:
+            return None
+
+        if next_format and next_format.start() < price.start():
+            return None 
+
+        return "$" + price.group(1)
+
+    return {
+        "Search URL": item["searchUrl"],
+        "Title": item["title"],
+        "Product URL": item["url"],
+        "ASIN": item["asin"],
+        "Paperback Price": getPrice(item["searchPrice"], "paperback"),
+        "Hardcover Price": getPrice(item["searchPrice"], "hardcover"),
+        "Kindle Price": getPrice(item["searchPrice"], "kindle"),
+        "AudioBook Price": getPrice(item["searchPrice"], "audiobook")
+    }
+
+async def extract_product(page: Page, search_data: Dict) -> Dict:
+    asin = search_data["ASIN"]
+    url = f"https://www.amazon.com/dp/{asin}"
 
     await page.goto(url, timeout=60_000, wait_until="domcontentloaded")
-    await page.wait_for_timeout(2000)
-    
-    title = await page.locator("span[id='productTitle']").first.inner_text()
+    await page.wait_for_selector("#tmmSwatches", timeout=15000)
 
-    price_format_texts = await page.evaluate("""
-        () => Array.from(
-            document.querySelectorAll("div#tmmSwatches div[role='listitem']")
-        ).map(el => el.innerText)
-    """)
+    title = await page.locator("#productTitle").inner_text()
+    swatches = await page.locator("#tmmSwatches").inner_text()
 
-    def find_text(label: str):
-        return next((t for t in price_format_texts if label in t.lower()),None)
+    def get_price(label):
+        block = swatches.lower()
+        i = block.find(label)
+        if i == -1:
+            return None
+        part = block[i:i+200]
+        m = re.search(r"\$\s*(\d+\.\d+)", part)
+        return "$" + m.group(1) if m else None
 
-    result = {
-        "Product URL": page.url,
+    return {
+        "Search URL": search_data["Search URL"],
+        "Search Title": search_data["Title"],
+        "Search ASIN": search_data["ASIN"],
+        "Search Page Paperback Price": search_data["Paperback Price"],
+        "Search Page Hardcover Price": search_data["Hardcover Price"],
+        "Search Page Kindle Price": search_data["Kindle Price"],
+        "Search Page AudioBook Price": search_data["AudioBook Price"],
+        "Product URL": url,
         "ASIN": asin,
-        "Title": title,
-        "Paperback Min Price": extract_price_from_text(find_text("paperback")),
-        "Hardcover Min Price": extract_price_from_text(find_text("hardcover")),
-        "Kindle Min Price": extract_price_from_text(find_text("kindle")),
-        "AudioBook Min Price": extract_price_from_text(find_text("audio")),
-        }
-
-    return [result]
-
+        "Title": title.strip(),
+        "Paperback Price": get_price("paperback"),
+        "Hardcover Price": get_price("hardcover"),
+        "Kindle Price": get_price("kindle"),
+        "AudioBook Price": get_price("audio"),
+    }
 
 async def create_browser_context(p) -> BrowserContext:
-
     browser = await p.chromium.launch(
         headless=True,
         args=["--disable-blink-features=AutomationControlled"]
@@ -79,42 +147,42 @@ async def create_browser_context(p) -> BrowserContext:
 
     return context
 
-async def run() -> None:
+async def run():
+    Path("output").mkdir(parents=True, exist_ok=True)
 
     df = pd.read_excel(INPUT_FILE)
 
-    df.columns = df.columns.str.strip().str.upper()
+    if "SEARCH_URL" not in df.columns:
+        raise ValueError("Excel must contain SEARCH_URL column")
 
-    required_columns = {"ASIN", "TITLE"}
-    if not required_columns.issubset(df.columns):
-        raise ValueError("Input file must contain ASIN and TITLE columns")
-
-    output_rows: List[Dict] = []
+    search_urls = df["SEARCH_URL"].dropna().tolist()
+    results = []
 
     async with async_playwright() as p:
         context = await create_browser_context(p)
         page = await context.new_page()
 
-        for row in df.itertuples(index=False):
-            asin = row.ASIN
+        for search_url in search_urls:
+            print(f"[INFO] Search: {search_url}")
 
-            print(f"[INFO] Processing ASIN: {asin}")
+            search_data = await extract_search_result(page, search_url)
+            if not search_data or not search_data["ASIN"]:
+                print("[WARN] No product found")
+                continue
+
+            print(f"[INFO] Found ASIN: {search_data['ASIN']}")
 
             try:
-                rows = await extract_product(page, asin)
-                output_rows.extend(rows)
-
+                row = await extract_product(page, search_data)
+                results.append(row)
                 await asyncio.sleep(random.randint(MIN_DELAY, MAX_DELAY))
-
-            except Exception as exc:
-                print(f"[ERROR] ASIN failed: {asin} | {exc}")
+            except Exception as e:
+                print(f"[ERROR] {search_data['ASIN']} -> {e}")
 
         await context.close()
 
-    Path("output").mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(output_rows).to_excel(OUTPUT_FILE, index=False)
-
-    print(f"[DONE] Extraction complete. Rows saved: {len(output_rows)}")
+    pd.DataFrame(results).to_excel(OUTPUT_FILE, index=False)
+    print(f"[DONE] Saved {len(results)} rows to {OUTPUT_FILE}")
 
 
 if __name__ == "__main__":
