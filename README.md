@@ -1,5 +1,9 @@
 # Amazon Book Data Extraction Scraper
 
+## Amazon Product & Price Scraper
+
+![Amazon Product & Price Scraper](assets/Amazon%20Data%20Scraper.png)
+
 ## Overview
 
 This project implements a **robust data extraction pipeline for Amazon book listings**.  
