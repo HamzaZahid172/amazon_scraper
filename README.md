@@ -58,8 +58,7 @@ amazon-scraper/
 
 Required columns:
 
-- `ASIN`
-- `Title` (optional, used for reference)
+- `SEARCH_URL`
 
 Example:
 
