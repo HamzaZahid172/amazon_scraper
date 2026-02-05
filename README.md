@@ -52,7 +52,6 @@ amazon-scraper/
 └── README.md
 ```
 
-
 ---
 
 ## Input File Format (`check.xlsx`)
@@ -64,9 +63,9 @@ Required columns:
 
 Example:
 
-| ASIN       | Title                              |
-|------------|------------------------------------|
-| B09XXXXXXX | Example Book Title                 |
+| SEARCH_URL                                                         |
+| ------------------------------------------------------------------ |
+| https://www.amazon.com/s?k=society+as+I+have+found+it&i=stripbooks |
 
 ---
 
@@ -74,11 +73,20 @@ Example:
 
 Example columns:
 
+- Search URL
+- Search Title
+- Search ASIN
+- Search Page Paperback Price
+- Search Page Hardcover Price
+- Search Page Kindle Price
+- Search Page AudioBook Price
+- Product URL
 - ASIN
 - Title
-- Format (Paperback, Hardcover, Kindle, Audiobook)
-- Lowest New Price
-- Product URL
+- Paperback Price
+- Hardcover Price
+- Kindle Price
+- AudioBook Price
 
 ---
 
@@ -93,11 +101,13 @@ venv\Scripts\activate      # Windows
 ```
 
 ### 2. Install dependencies
+
 ```bash
 pip install playwright pandas openpyxl
 ```
 
 ### 3. Install Playwright browser
+
 ```bash
 playwright install chromium
 ```
@@ -105,16 +115,19 @@ playwright install chromium
 ## Running the Scraper
 
 ### Place the input file in:
+
 ```bash
 input/check.xlsx
 ```
 
 ### Run the script:
+
 ```bash
 python scraper.py
 ```
 
 ### Output will be generated at:
+
 ```bash
 output/selection_output.xlsx
 ```
